@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tick Sightings Search</title>
+<style>
+  :root {
+    --bg: #f6f7f5; --card: #ffffff; --text: #1d2420; --muted: #66706a;
+    --line: #dde2dd; --accent: #2f6b4f; --accent-text: #ffffff; --error: #a63a2b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #151a17; --card: #1e2521; --text: #e8ece9; --muted: #9aa59e;
+            --line: #2f3833; --accent: #5aa57f; --accent-text: #0e1511; --error: #e07a6a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.5 system-ui, sans-serif; background: var(--bg); color: var(--text); }
+  main { max-width: 1000px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  form { display: grid; gap: 16px; }
+  .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+  label, legend { display: block; font-size: .85rem; font-weight: 600; margin-bottom: 4px; }
+  input[type=date], select {
+    width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px;
+    background: var(--bg); color: var(--text); font: inherit;
+  }
+  fieldset { border: 0; padding: 0; margin: 0; }
+  .cities { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 12px; }
+  .cities label, .check { font-weight: 400; font-size: .95rem; display: flex; gap: 6px; align-items: center; margin: 0; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  button { font: inherit; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--line);
+           background: var(--card); color: var(--text); cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  .summary { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  .error { color: var(--error); font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  td.muted { color: var(--muted); font-style: italic; }
+  .table-wrap { overflow-x: auto; }
+  .pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 12px; }
+  h2 { font-size: 1.1rem; margin: 0; }
+  .hint { color: var(--muted); font-size: .85rem; margin: 4px 0 12px; }
+  .bar-row { display: grid; grid-template-columns: 120px 1fr 110px; gap: 10px; align-items: center; margin: 6px 0; font-size: .95rem; }
+  .bar-track { background: var(--bg); border-radius: 4px; height: 16px; }
+  .bar-fill { background: var(--accent); height: 100%; border-radius: 4px; min-width: 2px; }
+  .bar-value { color: var(--muted); font-size: .85rem; text-align: right; white-space: nowrap; }
+  .trend { display: flex; align-items: flex-end; gap: 1px; height: 160px; border-bottom: 1px solid var(--line); }
+  .trend div { flex: 1 1 0; min-width: 1px; background: var(--accent); border-radius: 2px 2px 0 0; }
+  .trend div.zero { background: var(--line); height: 2px !important; }
+  .report-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .report-head select { width: auto; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Tick Sightings</h1>
+  <p class="sub">Search tick sightings by time range, location and species.</p>
+
+  <form id="filters" class="card">
+    <div class="row">
+      <div><label for="start">From</label><input type="date" id="start"></div>
+      <div><label for="end">To (inclusive)</label><input type="date" id="end"></div>
+      <div><label for="species">Species</label>
+        <select id="species"><option value="">Any species</option></select></div>
+      <div><label for="sort">Sort</label>
+        <select id="sort">
+          <option value="date_desc">Newest first</option>
+          <option value="date_asc">Oldest first</option>
+        </select></div>
+      <div><label for="limit">Per page</label>
+        <select id="limit"><option>25</option><option selected>50</option><option>100</option></select></div>
+    </div>
+    <fieldset>
+      <legend>Location (leave all unticked for everywhere)</legend>
+      <div class="cities" id="cities"></div>
+    </fieldset>
+    <label class="check"><input type="checkbox" id="hide-incomplete"> Hide sightings with missing details</label>
+    <div class="actions">
+      <button class="primary" type="submit">Search</button>
+      <button type="button" id="reset">Clear filters</button>
+    </div>
+  </form>
+
+  <section class="card" aria-live="polite">
+    <div class="summary"><span id="summary">Loading…</span></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Date</th><th>Location</th><th>Species</th><th>Latin name</th></tr></thead>
+        <tbody id="results"></tbody>
+      </table>
+    </div>
+    <div class="pager">
+      <button id="prev" type="button">Previous</button>
+      <span id="page-info"></span>
+      <button id="next" type="button">Next</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Sightings by region</h2>
+    <p class="hint" id="region-hint">Follows the filters above.</p>
+    <div id="by-region"></div>
+  </section>
+
+  <section class="card">
+    <div class="report-head">
+      <h2>Trend over time</h2>
+      <select id="interval" aria-label="Trend interval">
+        <option value="monthly">Monthly</option>
+        <option value="weekly">Weekly</option>
+      </select>
+    </div>
+    <p class="hint" id="trend-hint">Follows the filters above.</p>
+    <div class="trend" id="trend" role="img" aria-label="Bar chart of sightings over time"></div>
+    <p class="hint" id="trend-caption"></p>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const PLACEHOLDER = "Incomplete";
+let offset = 0, total = 0;
+
+function setSummary(text, isError = false) {
+  const el = $("summary");
+  el.textContent = text;
+  el.className = isError ? "error" : "";
+}
+
+async function getJson(url) {
+  const res = await fetch(url);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const detail = Array.isArray(body.detail) ? body.detail.map((d) => d.msg).join("; ") : body.detail;
+    throw new Error(detail || `Request failed (${res.status})`);
+  }
+  return body;
+}
+
+function buildQuery(paging = true) {
+  const p = new URLSearchParams();
+  if ($("start").value) p.set("start", $("start").value);
+  if ($("end").value) p.set("end", $("end").value);
+  if ($("species").value) p.set("species", $("species").value);
+  document.querySelectorAll("#cities input:checked").forEach((c) => p.append("city", c.value));
+  if ($("hide-incomplete").checked) p.set("include_incomplete", "false");
+  if (paging) {
+    p.set("sort", $("sort").value);
+    p.set("limit", $("limit").value);
+    p.set("offset", offset);
+  }
+  return p;
+}
+
+function showReportError(el, hintId, err) {
+  el.replaceChildren();
+  const hint = $(hintId);
+  hint.textContent = err.message;
+  hint.className = "hint error";
+}
+
+async function loadRegionReport() {
+  const el = $("by-region"), hint = $("region-hint");
+  try {
+    const data = await getJson("/reports/by-region?" + buildQuery(false));
+    hint.textContent = `${data.total.toLocaleString()} sightings across ${data.regions.length} regions. Follows the filters above.`;
+    hint.className = "hint";
+    el.replaceChildren();
+    const max = Math.max(1, ...data.regions.map((r) => r.sightings));
+    for (const r of data.regions) {
+      const row = document.createElement("div");
+      row.className = "bar-row";
+      const name = document.createElement("span");
+      name.textContent = r.region;
+      const track = document.createElement("div");
+      track.className = "bar-track";
+      const fill = document.createElement("div");
+      fill.className = "bar-fill";
+      fill.style.width = (r.sightings / max * 100) + "%";
+      track.appendChild(fill);
+      const value = document.createElement("span");
+      value.className = "bar-value";
+      value.textContent = `${r.sightings.toLocaleString()} (${r.percent}%)`;
+      row.append(name, track, value);
+      el.appendChild(row);
+    }
+  } catch (err) {
+    showReportError(el, "region-hint", err);
+  }
+}
+
+async function loadTrend() {
+  const el = $("trend"), hint = $("trend-hint"), caption = $("trend-caption");
+  const interval = $("interval").value;
+  try {
+    const q = buildQuery(false);
+    q.set("interval", interval);
+    const data = await getJson("/reports/trends?" + q);
+    hint.textContent = `${data.total.toLocaleString()} sightings, grouped ${interval}. Follows the filters above.`;
+    hint.className = "hint";
+    el.replaceChildren();
+    const max = Math.max(1, ...data.points.map((p) => p.sightings));
+    for (const p of data.points) {
+      const bar = document.createElement("div");
+      bar.style.height = (p.sightings / max * 100) + "%";
+      if (p.sightings === 0) bar.className = "zero";
+      const when = interval === "weekly" ? "week of " + p.period : p.period;
+      bar.title = `${when}: ${p.sightings}`;
+      el.appendChild(bar);
+    }
+    if (data.points.length) {
+      const peak = data.points.reduce((a, b) => (b.sightings > a.sightings ? b : a));
+      caption.textContent = `${data.points[0].period} to ${data.points[data.points.length - 1].period}. ` +
+        `Busiest: ${peak.period} (${peak.sightings} sightings). Hover a bar for its count.`;
+    } else {
+      caption.textContent = "No sightings match these filters.";
+    }
+  } catch (err) {
+    showReportError(el, "trend-hint", err);
+    caption.textContent = "";
+  }
+}
+
+function loadReports() {
+  loadRegionReport();
+  loadTrend();
+}
+
+function cell(tr, text) {
+  const td = document.createElement("td");
+  td.textContent = text;
+  if (text === PLACEHOLDER) td.className = "muted";
+  tr.appendChild(td);
+}
+
+async function search() {
+  setSummary("Searching…");
+  try {
+    const data = await getJson("/sightings?" + buildQuery());
+    total = data.total;
+    const body = $("results");
+    body.replaceChildren();
+    for (const s of data.results) {
+      const tr = document.createElement("tr");
+      cell(tr, new Date(s.observed_at).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }));
+      cell(tr, s.city);
+      cell(tr, s.species);
+      cell(tr, s.latin_name);
+      body.appendChild(tr);
+    }
+    const from = total === 0 ? 0 : data.offset + 1;
+    const to = data.offset + data.results.length;
+    setSummary(total === 0 ? "No sightings match these filters."
+                           : `Showing ${from}–${to} of ${total.toLocaleString()} sightings`);
+    const limit = data.limit;
+    $("page-info").textContent = total ? `Page ${Math.floor(data.offset / limit) + 1} of ${Math.ceil(total / limit)}` : "";
+    $("prev").disabled = data.offset === 0;
+    $("next").disabled = data.offset + limit >= total;
+  } catch (err) {
+    $("results").replaceChildren();
+    setSummary(err.message, true);
+    $("prev").disabled = $("next").disabled = true;
+    $("page-info").textContent = "";
+  }
+}
+
+async function loadOptions() {
+  try {
+    const [cities, species] = await Promise.all([getJson("/locations"), getJson("/species")]);
+    for (const c of cities) {
+      const label = document.createElement("label");
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.value = c.city;
+      label.append(box, `${c.city} (${c.sightings})`);
+      $("cities").appendChild(label);
+    }
+    for (const name of [...new Set(species.map((s) => s.species))]) {
+      const opt = document.createElement("option");
+      opt.value = opt.textContent = name;
+      $("species").appendChild(opt);
+    }
+  } catch (err) {
+    setSummary("Could not load filter options: " + err.message, true);
+  }
+}
+
+$("filters").addEventListener("submit", (e) => { e.preventDefault(); offset = 0; search(); loadReports(); });
+$("reset").addEventListener("click", () => { $("filters").reset(); offset = 0; search(); loadReports(); });
+$("interval").addEventListener("change", loadTrend);
+$("prev").addEventListener("click", () => { offset = Math.max(0, offset - Number($("limit").value)); search(); });
+$("next").addEventListener("click", () => { offset += Number($("limit").value); search(); });
+
+loadOptions().then(() => { search(); loadReports(); });
+</script>
+</body>
+</html>
