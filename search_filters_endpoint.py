@@ -1,8 +1,5 @@
 """Tick sightings endpoint: search and filter data fetched by Ingest.py.
 
-    pip install fastapi uvicorn
-    python Ingest.py
-    uvicorn search_filters_endpoint:app --reload       # then open http://127.0.0.1:8000/
     currently only works on a localhost machine
 Endpoints
     GET /sightings        search with filters (time range, city, species), sort, pagination

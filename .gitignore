@@ -1,3 +1,4 @@
 /ticks.db
 /ticks.db-shm
 /ticks.db-wal
+/__pycache__/
