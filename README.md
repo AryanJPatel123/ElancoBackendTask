@@ -340,11 +340,6 @@ assistant), as noted in the source.
   shown on a map.
 - **Scheduled syncs:** run ingestion automatically (cron or a background task) instead of by hand.
 - **A proper test suite:** move the self-test into pytest and add API tests using FastAPI's `TestClient`.
-- **Pinned dependencies:** add a `requirements.txt` with exact versions.
-- **Incremental fetching:** if the API supported paging or a "changed since" filter, fetch only new
-  records instead of downloading everything each time.
-- **Production readiness:** PostgreSQL, Docker, authentication and rate limiting, CORS settings for a
-  separately hosted front end, and keyset pagination for very deep result pages.
 - **A quarantine review endpoint**, so conflicts can be inspected and resolved through the API.
 
 ---
