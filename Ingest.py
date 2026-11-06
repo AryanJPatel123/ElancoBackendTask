@@ -5,9 +5,9 @@ duplicates, and stores them in ticks.db.
 
     pip install requests pydantic
 
-    python load_data.py                  # sync from the API
-    python load_data.py --self-test      # run the built-in tests
-    python load_data.py --benchmark 200000   # time a load of N fake records
+    python Ingest.py                  # sync from the API
+    python Ingest.py --self-test      # run the built-in tests
+    python Ingest.py --benchmark 200000   # time a load of N fake records
     The testing and benchmarks here were written by claude to validate how the system deals with large datasets
 
 Design (see README for the longer version)
@@ -99,7 +99,6 @@ class Sighting(BaseModel):
         v = v.strip()
         return v or None  # plain whitespace becomes None
 
-
 def completeness(row: dict) -> int:
     return sum(row[f] != PLACEHOLDER for f in MERGE_FIELDS)
 
@@ -119,7 +118,6 @@ def clean(raw: dict) -> dict:
         date = date.astimezone(timezone.utc).replace(tzinfo=None)
     if date > datetime.now(timezone.utc).replace(tzinfo=None):
         raise ValueError("date is in the future")
-
     row = {
         "id": s.id,
         "observed_at": date.isoformat(),
@@ -149,6 +147,7 @@ def merge(existing: dict, new: dict):
         conflicts.append(f"observed_at: kept {existing['observed_at']}, ignored {new['observed_at']}")
     merged["completeness"] = completeness(merged)
     return merged, conflicts
+
 
 def connect(path) -> sqlite3.Connection:
     db = sqlite3.connect(path)
@@ -236,7 +235,10 @@ def load(db, records, chunk_size=CHUNK_SIZE) -> dict:
 
 
 def fetch_records() -> list:
-    """GET all sightings, retrying transient failures with exponential backoff."""
+    """GET all sightings, retrying transient failures with exponential backoff.
+    Backoff waits 0s, 2s, 4s... so a struggling server isn't hammered, and Retry-After
+    is respected when the server sends one. The (connect, read) timeout means a hung
+    server can never freeze the sync."""
     session = requests.Session()
     retry = Retry(total=5, backoff_factor=1, status_forcelist=(429, 500, 502, 503, 504),
                   respect_retry_after_header=True)
@@ -327,7 +329,7 @@ def fake_records(n, seed=1):
                     "location": rnd.choice(CITIES),
                     "species": "" if rnd.random() < 0.05 else species,  # 5% incomplete
                     "latinName": latin})
-        if rnd.random() < 0.02:  # 2% arrive again, with a field missing
+        if rnd.random() < 0.02:
             dup = dict(out[-1])
             dup["latinName"] = ""
             out.append(dup)

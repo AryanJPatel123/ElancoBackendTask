@@ -2,7 +2,7 @@
 
     pip install fastapi uvicorn
     python Ingest.py
-    uvicorn api:app --reload       # then open http://127.0.0.1:8000/
+    uvicorn search_filters_endpoint:app --reload       # then open http://127.0.0.1:8000/
     currently only works on a localhost machine
 Endpoints
     GET /sightings        search with filters (time range, city, species), sort, pagination
@@ -11,6 +11,9 @@ Endpoints
     GET /species          species in the data, with sighting counts
     GET /sync/status      when the data was last refreshed, and whether that worked
     GET /health           is the database reachable?
+    GET /reports/by-region    sightings per city, with percentages
+    GET /reports/by-species   sightings per species, with percentages
+    GET /reports/trends       sightings per week or month (?interval=weekly|monthly)
 """
 import json
 import os
@@ -47,11 +50,9 @@ def get_db():
     finally:
         db.close()
 
-
 @app.exception_handler(sqlite3.Error)
 def database_error(request: Request, exc: sqlite3.Error):
     return JSONResponse(status_code=503, content={"detail": f"Database error: {exc}"})
-
 
 class SightingOut(BaseModel):
     id: str
@@ -123,7 +124,6 @@ def parse_when(value: str, field: str):
         dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
     return dt, ("T" not in value and " " not in value)
 
-
 class Filters:
     """The WHERE clause and parameters built from the query string."""
 
@@ -182,7 +182,7 @@ class Filters:
 
 
 
-
+#Endpoints
 
 @app.get("/", include_in_schema=False)
 def home():
@@ -198,6 +198,7 @@ def search_sightings(
     offset: int = Query(0, ge=0),
     db: sqlite3.Connection = Depends(get_db),
 ):
+
     total = db.execute(f"SELECT COUNT(*) FROM sightings {filters.where}", filters.params).fetchone()[0]
     direction = "DESC" if sort == "date_desc" else "ASC"
     rows = db.execute(
@@ -219,7 +220,6 @@ def get_sighting(sighting_id: str, db: sqlite3.Connection = Depends(get_db)):
         raise HTTPException(404, f"No sighting with id '{sighting_id}'")
     return dict(row)
 
-
 @app.get("/locations", summary="Cities in the data")
 def list_locations(db: sqlite3.Connection = Depends(get_db)):
     rows = db.execute("SELECT city, COUNT(*) AS sightings FROM sightings GROUP BY city ORDER BY city").fetchall()
@@ -232,7 +232,6 @@ def list_species(db: sqlite3.Connection = Depends(get_db)):
         "SELECT species, latin_name, COUNT(*) AS sightings FROM sightings "
         "GROUP BY species, latin_name ORDER BY species").fetchall()
     return [dict(r) for r in rows]
-
 
 MAX_FILLED_PERIODS = 5000  # limit on how many empty periods the report can generate
 
@@ -284,6 +283,9 @@ def fill_gaps(points: list, interval: str, start_dt: Optional[datetime], end_dt:
         filled.append({"period": label, "sightings": counts.get(label, 0)})
         current = next_period(current, interval)
     return filled
+
+
+
 
 
 @app.get("/reports/by-region", response_model=RegionReport, summary="Sightings per region")
@@ -342,7 +344,6 @@ def sync_status(db: sqlite3.Connection = Depends(get_db)):
         "last_run": latest(),
         "last_successful_run": latest("WHERE status = 'ok'"),
     }
-
 
 @app.get("/health", summary="Is the database reachable?")
 def health(db: sqlite3.Connection = Depends(get_db)):
