@@ -2,6 +2,10 @@
 
 **Author:** Aryan J Patel
 
+**Video Submission**
+
+https://youtu.be/HQegEIBlDyw
+
 This is the backend for the tick sightings tracker. It downloads raw sighting data from the
 Elanco API, cleans it, removes duplicates and stores it. Then provides an API to search
 the sightings and to report on them, plus a small web page for trying the API in a browser.
